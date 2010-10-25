@@ -46,7 +46,7 @@ static RootInfo g_roots[] = {
     { "CACHE:", CACHE_DEVICE, NULL, "cache", "/cache", CACHE_FILESYSTEM, CACHE_FILESYSTEM_OPTIONS },
     { "DATA:", DATA_DEVICE, NULL, "userdata", "/data", DATA_FILESYSTEM, DATA_FILESYSTEM_OPTIONS },
 #ifdef HAS_DATADATA
-    { "DATADATA:", DATADATA_DEVICE, NULL, "datadata", "/datadata", DATADATA_FILESYSTEM, DATADATA_FILESYSTEM_OPTIONS },
+    { "DATADATA:", DATADATA_DEVICE, NULL, "datadata", "/dbdata", DATADATA_FILESYSTEM, DATADATA_FILESYSTEM_OPTIONS },
 #endif
     { "MISC:", g_mtd_device, NULL, "misc", NULL, g_raw, NULL },
     { "PACKAGE:", NULL, NULL, NULL, NULL, g_package_file, NULL },
@@ -228,6 +228,7 @@ ensure_root_path_mounted(const char *root_path)
 {
     const RootInfo *info = get_root_info_for_path(root_path);
     if (info == NULL) {
+        LOGE("No info found");
         return -1;
     }
 
@@ -238,10 +239,20 @@ ensure_root_path_mounted(const char *root_path)
         return 0;
     }
 
+    ret = ensure_lagfix_mount_points(info);
+    if (ret == 0 ) {
+      // Mount was done succesfully by the lagfix engine;
+      return 0;
+    } else if (ret == -1) {
+      // The lagfix engine said to say sorry
+      return -1;
+    }
+
     /* It's not mounted.
      */
     if (info->device == g_mtd_device) {
         if (info->partition_name == NULL) {
+            LOGE("Partition name was NULL");
             return -1;
         }
 //TODO: make the mtd stuff scan once when it needs to
@@ -249,6 +260,7 @@ ensure_root_path_mounted(const char *root_path)
         const MtdPartition *partition;
         partition = mtd_find_partition_by_name(info->partition_name);
         if (partition == NULL) {
+            LOGE("Partition was NULL");
             return -1;
         }
         return mtd_mount_partition(partition, info->mount_point,
@@ -259,13 +271,14 @@ ensure_root_path_mounted(const char *root_path)
         info->filesystem == NULL ||
         info->filesystem == g_raw ||
         info->filesystem == g_package_file) {
+        LOGE("INFO is WRONG");
         return -1;
     }
 
     mkdir(info->mount_point, 0755);  // in case it doesn't already exist
     if (mount_internal(info->device, info->mount_point, info->filesystem, info->filesystem_options)) {
         if (info->device2 == NULL) {
-            LOGE("Can't mount %s\n(%s)\n", info->device, strerror(errno));
+            LOGE("Can't mount %s to %s with parameters %s %s\n(%s)\n", info->device, info->mount_point, info->filesystem, info->filesystem_options, strerror(errno));
             return -1;
         } else if (mount(info->device2, info->mount_point, info->filesystem,
                 MS_NOATIME | MS_NODEV | MS_NODIRATIME, "")) {
@@ -303,6 +316,15 @@ ensure_root_path_unmounted(const char *root_path)
         /* It's not mounted.
          */
         return 0;
+    }
+
+    ret = ensure_lagfix_unmount_points(info);
+    if (ret == 0 ) {
+      // Unmount was done succesfully by the lagfix engine;
+      return 0;
+    } else if (ret == -1) {
+      // The lagfix engine said to say sorry
+      return -1;
     }
 
     return unmount_mounted_volume(volume);
@@ -348,6 +370,11 @@ format_root_device(const char *root)
         LOGW("format_root_device: can't resolve \"%s\"\n", root);
         return -1;
     }
+
+    int res = ensure_lagfix_formatted(info);
+    if (res <=0 ) 
+        return res;
+
     if (info->mount_point != NULL && info->device == g_mtd_device) {
         /* Don't try to format a mounted device.
          */

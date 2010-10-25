@@ -684,6 +684,7 @@ Value* WriteRawImageFn(const char* name, State* state, int argc, Expr* argv[]) {
 #ifdef BOARD_USES_BMLUTILS
     if (0 == write_raw_image(name, filename)) {
         result = partition;
+        goto done;
     }
     result = strdup("Failure");
 #else
@@ -927,7 +928,11 @@ Value* RunProgramFn(const char* name, State* state, int argc, Expr* argv[]) {
     memcpy(args2, args, sizeof(char*) * argc);
     args2[argc] = NULL;
 
-    fprintf(stderr, "about to run program [%s] with %d args\n", args2[0], argc);
+    int i;
+    fprintf(stderr, "about to run program [%s] with %d args\nexecv: ", args2[0], argc);
+    for (i=0; i<argc; i++)
+        fprintf(stderr, "%s ", args2[i]);
+    fprintf(stderr, "\n");
 
     pid_t child = fork();
     if (child == 0) {
@@ -947,7 +952,6 @@ Value* RunProgramFn(const char* name, State* state, int argc, Expr* argv[]) {
                 WTERMSIG(status));
     }
 
-    int i;
     for (i = 0; i < argc; ++i) {
         free(args[i]);
     }

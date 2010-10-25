@@ -14,6 +14,9 @@ LOCAL_SRC_FILES := \
 	commands.c \
 	recovery.c \
 	install.c \
+	graphsh.c \
+	truncate.c \
+	lagfixutils.c \
 	roots.c \
 	ui.c \
 	verifier.c
