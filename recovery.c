@@ -38,6 +38,9 @@
 #include "minzip/DirUtil.h"
 #include "roots.h"
 #include "recovery_ui.h"
+#include "graphsh.h"
+#include "truncate.h"
+#include "lagfixutils.h"
 
 #include "extendedcommands.h"
 #include "commands.h"
@@ -559,6 +562,14 @@ main(int argc, char **argv) {
             return reboot_main(argc, argv);
         if (strstr(argv[0], "setprop"))
             return setprop_main(argc, argv);
+        /*
+        if (strstr(argv[0], "graphsh"))
+            return graphsh_main(argc, argv);
+        if (strstr(argv[0], "truncate"))
+            return truncate_main(argc,argv);
+        if (strstr(argv[0], "lagfixer"))
+            return lagfixer_main(argc,argv);
+        */
 		return busybox_driver(argc, argv);
 	}
     __system("/sbin/postrecoveryboot.sh");
