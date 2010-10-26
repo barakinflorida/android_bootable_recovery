@@ -24,55 +24,39 @@
 // for shell in /system/bin/sh. This is bad.
 #define _PATH_BSHELL "/sbin/sh"
 
-extern char **environ;
-int
-shell_cmd(const char *command)
-{
-  pid_t pid;
-    sig_t intsave, quitsave;
-    sigset_t mask, omask;
-    int pstat;
-    char *argp[] = {"sh", "-c", NULL, NULL};
+static int
+run_exec_process ( char **argv) {
+    pid_t pid;
+    int status;
+    pid = fork();
+    if (pid == 0) {
+        execv(argv[0], argv);
+        fprintf(stderr, "E:Can't run (%s)\n",strerror(errno));
+        _exit(-1);
+    }
 
-    if (!command)        /* just checking... */
-        return(1);
-
-    argp[2] = (char *)command;
-
-    sigemptyset(&mask);
-    sigaddset(&mask, SIGCHLD);
-    sigprocmask(SIG_BLOCK, &mask, &omask);
-    switch (pid = vfork()) {
-    case -1:            /* error */
-        sigprocmask(SIG_SETMASK, &omask, NULL);
-        return(-1);
-    case 0:                /* child */
-        sigprocmask(SIG_SETMASK, &omask, NULL);
-        execve(_PATH_BSHELL, argp, environ);
-    _exit(127);
-  }
-
-    intsave = (sig_t)  bsd_signal(SIGINT, SIG_IGN);
-    quitsave = (sig_t) bsd_signal(SIGQUIT, SIG_IGN);
-    pid = waitpid(pid, (int *)&pstat, 0);
-    sigprocmask(SIG_SETMASK, &omask, NULL);
-    (void)bsd_signal(SIGINT, intsave);
-    (void)bsd_signal(SIGQUIT, quitsave);
-    return (pid == -1 ? -1 : pstat);
+    waitpid(pid, &status, 0);
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        return 1;
+    }
+    return 0;
 }
 
+#define BMLWRITE_BIN      "/sbin/bmlwrite"
+
 int write_raw_image(const char* partition, const char* filename) {
-    char tmp[PATH_MAX];
     if (0 != strcmp("boot", partition)) {
         return -1;
     }
-    sprintf(tmp, "/sbin/bmlwrite %s %s", filename, BOARD_BOOT_DEVICE);
-    fprintf(stderr, "bmlutils about to run: [%s] in shell\n", tmp);
-    return shell_cmd(tmp);
+    char *const bmlwrite[] = {BMLWRITE_BIN, filename, BOARD_BOOT_DEVICE, NULL};
+    return run_exec_process(bmlwrite);
 }
 
 int read_raw_image(const char* partition, const char* filename) {
-    char tmp[PATH_MAX];
-    sprintf(tmp, "dd if=/dev/block/bml7 of=%s", filename);
-    return shell_cmd(tmp);
+    char _if[PATH_MAX];
+    char _of[PATH_MAX];
+    sprintf(_if, "if=%s", BOARD_BOOT_DEVICE);
+    sprintf(_of, "of=%s", filename);
+    char *const dd[] = {"/sbin/dd", _if, _of, NULL};
+    return run_exec_process(dd);
 }
