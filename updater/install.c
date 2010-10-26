@@ -682,7 +682,7 @@ Value* WriteRawImageFn(const char* name, State* state, int argc, Expr* argv[]) {
     }
 
 #ifdef BOARD_USES_BMLUTILS
-    if (0 == write_raw_image(name, filename)) {
+    if (0 == write_raw_image(partition, filename)) {
         result = partition;
         goto done;
     }

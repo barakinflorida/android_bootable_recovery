@@ -30,13 +30,16 @@ run_exec_process ( char **argv) {
     int status;
     pid = fork();
     if (pid == 0) {
-        execv(argv[0], argv);
-        fprintf(stderr, "E:Can't run (%s)\n",strerror(errno));
-        _exit(-1);
+        if (execv(argv[0], argv) < 0) {
+            fprintf(stderr, "E:%s returned (%s)\n", argv[0], strerror(errno));
+            _exit(-1);
+        }
+        _exit(0);
     }
 
     waitpid(pid, &status, 0);
     if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        fprintf(stderr, "E:error executing %s\n", argv[0]);
         return 1;
     }
     return 0;
