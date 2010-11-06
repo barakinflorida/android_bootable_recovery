@@ -215,7 +215,7 @@ void mount_block(const char* name, const char* blockname, const char* loopblock,
   getfsopts = get_fs_options(name);
   getloopopts = get_loop_options(name);
   char tmp[256];
-  if (getloopopts) {
+  if (getloopopts>0) {
     sprintf(tmp,"mkdir %s",destloop);__system(tmp);
     sprintf(tmp,"chmod 700 %s",destloop);__system(tmp);
     if (getfsopts==0) {
@@ -226,6 +226,10 @@ void mount_block(const char* name, const char* blockname, const char* loopblock,
       sprintf(tmp,"mount -t ext4 -o noatime,barrier=0,noauto_da_alloc %s %s",blockname,destloop);
     } else if (getfsopts==3) {
       sprintf(tmp,"mount -t ext2 -o noatime,nodiratime %s %s",blockname,destloop);
+    } else if (getfsopts==-1) {
+      // rfs can't autodetect itself
+      sprintf(tmp,"mount -t rfs -o nosuid,nodev,check=no %s %s",blockname,destnoloop);
+      sprintf(tmp,"mount %s %s",blockname,destloop);
     }
     __system(tmp);
     sprintf(tmp,"losetup %s %s/.extfs",loopblock,destloop);__system(tmp);
@@ -239,6 +243,10 @@ void mount_block(const char* name, const char* blockname, const char* loopblock,
       sprintf(tmp,"mount -t ext4 -o noatime,barrier=0,noauto_da_alloc %s %s",blockname,destnoloop);
     } else if (getfsopts==3) {
       sprintf(tmp,"mount -t ext2 -o noatime,nodiratime %s %s",blockname,destnoloop);
+    } else if (getfsopts==-1) {
+      // rfs can't autodetect itself
+      sprintf(tmp,"mount -t rfs -o nosuid,nodev,check=no %s %s",blockname,destnoloop);
+      sprintf(tmp,"mount %s %s",blockname,destnoloop);
     }
     __system(tmp);
   }
@@ -250,14 +258,11 @@ int ensure_lagfix_mount_points(const RootInfo *info) {
   bindopts = get_bind_options();
   if (strcmp(info->name,"DATA:")==0) {
     mount_block("DATA","/dev/block/mmcblk0p2","/dev/block/loop1","/data","/res/odata");
-    if (bindopts) {
+    if (bindopts>0) {
       ensure_root_path_mounted("DATADATA:");
       __system("mkdir -p /dbdata/.data/data");
-      //__system("mkdir -p /dbdata/.data/dalvik-cache");
       __system("mkdir -p /data/data");
-      //__system("mkdir -p /data/dalvik-cache");
       __system("mount -o bind /dbdata/.data/data /data/data");
-      //__system("mount -o bind /dbdata/.data/dalvik-cache /data/dalvik-cache");
     }
   } else if (strcmp(info->name,"DATADATA:")==0) {
     mount_block("DBDATA","/dev/block/stl10","/dev/block/loop2","/dbdata","/res/odbdata");
@@ -284,12 +289,15 @@ int ensure_lagfix_formatted(const RootInfo *info) {
   // we won't remove hidden files in root yet
   if (strcmp(info->name,"DATA:")==0) {
     __system("rm -rf /data/*");
+    __system("rm -rf /data/.*");
     return 0;
   } else if (strcmp(info->name,"DATADATA:")==0) {
     __system("rm -rf /dbdata/*");
+    __system("rm -rf /dbdata/.*");    
     return 0;
   } else if (strcmp(info->name,"CACHE:")==0) {
     __system("rm -rf /cache/*");
+    __system("rm -rf /cache/.*");
     return 0;
   } else return 1;
 }
@@ -380,6 +388,7 @@ int create_lagfix_partition(int id) {
 }
 
 int do_lagfix() {
+/*
   ui_print("checking mounts available\n");
   if (ensure_root_path_mounted("DATA:")!=0) return -1;
   if (ensure_root_path_mounted("DATADATA:")!=0) return -1;
@@ -388,8 +397,12 @@ int do_lagfix() {
 
   char tmp[PATH_MAX];
   nandroid_generate_timestamp_path(tmp);
-  ui_print("Creating a nandroid backup at %s\n",tmp);
-  if (nandroid_backup(tmp)!=0) return -1;
+  if (do_fr!=2) {
+    ui_print("Creating a nandroid backup at %s\n",tmp);
+    if (nandroid_backup_flags(tmp,DONT_BACKUP_SYSTEM)!=0) return -1;
+  } else {
+    ui_print("Not creating a backup\n");
+  }
 
   ui_print("Backup completed, recreating file systems\n");
 
@@ -424,13 +437,16 @@ int do_lagfix() {
   ui_print("Unmounting again\n");
   unmount_all_lagfixed();
 
-  ui_print("Restoring data\n");
-  nandroid_restore(tmp,0,0,1,1,0);
-
-  // restore might have brought some .data into dbdata, clear them
-  if (!get_bind_options()) {
-    if (ensure_root_path_mounted("DATADATA:")!=0) return -1;
-    __system("rm -rf /dbdata/.data");
+  if (do_fr) {
+    ui_print("Factory reset was requested, not restoring backed up data\n");
+  } else {
+    ui_print("Restoring data\n");
+    nandroid_restore(tmp,0,0,1,1,0);
+    // restore might have brought some .data into dbdata, clear them
+    if (!get_bind_options()) {
+      if (ensure_root_path_mounted("DATADATA:")!=0) return -1;
+      __system("rm -rf /dbdata/.data");
+    }
   }
 
   __system("mount");
@@ -438,7 +454,7 @@ int do_lagfix() {
   sync();
   sleep(5);
   unmount_all_lagfixed();
-  sync();
+  sync();*/
   return 0;
 }
 
@@ -448,7 +464,14 @@ int lagfixer_main(int argc, char** argv) {
   create_fstab();
   ui_set_show_text(1);
 
-  int res = do_lagfix();
+  int res;
+  int opts = 0;
+  if ((argc>=2)&&(strcmp(argv[1],"fr")==0)) {
+    opts=2;
+  } else if ((argc>=2)&&(strcmp(argv[1],"b")==0)) {
+    opts=1;
+  }
+  res = do_lagfix(opts);
   if (res) {
     ui_print("Something went wrong while doing the lagfix, sorry.\n");
   } else {

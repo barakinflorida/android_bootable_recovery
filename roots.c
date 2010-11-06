@@ -51,11 +51,12 @@ static RootInfo g_roots[] = {
     { "MISC:", g_mtd_device, NULL, "misc", NULL, g_raw, NULL },
     { "PACKAGE:", NULL, NULL, NULL, NULL, g_package_file, NULL },
     { "RECOVERY:", g_mtd_device, NULL, "recovery", "/", g_raw, NULL },
-    { "SDCARD:", SDCARD_DEVICE_PRIMARY, SDCARD_DEVICE_SECONDARY, NULL, "/sdcard", "vfat", NULL },
-    { "SDEXT:", SDEXT_DEVICE, NULL, NULL, "/sd-ext", SDEXT_FILESYSTEM, NULL },
+    { "SDCARD:", SDCARD_DEVICE_PRIMARY, SDCARD_DEVICE_SECONDARY, NULL, "/mnt/sdcard", "vfat", NULL },
+    { "SDEXT:", NULL, NULL, NULL, "/sd-ext", SDEXT_FILESYSTEM, NULL },
     { "SYSTEM:", SYSTEM_DEVICE, NULL, "system", "/system", SYSTEM_FILESYSTEM, SYSTEM_FILESYSTEM_OPTIONS },
     { "MBM:", g_mtd_device, NULL, "mbm", NULL, g_raw, NULL },
     { "TMP:", NULL, NULL, NULL, "/tmp", NULL, NULL },
+    { "EFS:", "dev/block/stl3", NULL, NULL, "/efs", "rfs", NULL },
 };
 #define NUM_ROOTS (sizeof(g_roots) / sizeof(g_roots[0]))
 
@@ -364,17 +365,15 @@ format_root_device(const char *root)
         return -1;
     }
     */
-
+   
     const RootInfo *info = get_root_info_for_path(root);
     if (info == NULL || info->device == NULL) {
         LOGW("format_root_device: can't resolve \"%s\"\n", root);
         return -1;
     }
-
     int res = ensure_lagfix_formatted(info);
-    if (res <=0 ) 
-        return res;
-
+    if (res==0) return 0;
+    if (res<0) return res;
     if (info->mount_point != NULL && info->device == g_mtd_device) {
         /* Don't try to format a mounted device.
          */
