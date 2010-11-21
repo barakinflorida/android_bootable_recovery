@@ -91,6 +91,14 @@ char* INSTALL_MENU_ITEMS[] = {  "apply sdcard:update.zip",
 #define ITEM_SIG_CHECK        2
 #define ITEM_ASSERTS          3
 
+
+char* SD_SELECT_MENU_ITEMS[] = {  "internal SD",
+                                "external SD",
+                                NULL };
+
+#define INTERNAL_SD     0
+#define EXTERNAL_SD     1
+
 void show_install_update_menu()
 {
     static char* headers[] = {  "Apply update from .zip file on SD card",
@@ -307,27 +315,50 @@ char* choose_file_menu(const char* directory, const char* fileExtensionOrDirecto
 
 void show_choose_zip_menu()
 {
-    if (ensure_root_path_mounted("SDCARD:") != 0) {
-        LOGE ("Can't mount /mnt/sdcard\n");
+
+    static char* headers[] = {  "Choose a SD Card",
+                                "",
+                                NULL 
+    };
+
+    char* source;
+	
+    int chosen_item = get_menu_selection(headers, SD_SELECT_MENU_ITEMS, 0);
+        switch (chosen_item)
+        {
+            case INTERNAL_SD:
+                source = "SDCARD-INTERNAL:"; 
+                break;
+            case EXTERNAL_SD:
+                source = "SDCARD-EXTERNAL:"; 
+                break;
+	}
+
+    if (ensure_root_path_mounted(source) != 0) {
+        LOGE ("Can't mount \n");
         return;
     }
 
-    static char* headers[] = {  "Choose a zip to apply",
+    char mount_point[PATH_MAX];
+    translate_root_path(source, mount_point, PATH_MAX);
+
+    static char* headersSelect[] = {  "Choose a zip to apply",
                                 "",
                                 NULL 
     };
     
-    char* file = choose_file_menu("/mnt/sdcard/", ".zip", headers);
+    char* file = choose_file_menu(mount_point, ".zip", headersSelect);
+	
     if (file == NULL)
         return;
     char sdcard_package_file[1024];
-    strcpy(sdcard_package_file, "SDCARD:");
-    strcat(sdcard_package_file,  file + strlen("/mnt/sdcard/"));
+    strcpy(sdcard_package_file, source);
+    strcat(sdcard_package_file,  file + strlen(mount_point));
     static char* confirm_install  = "Confirm install?";
     static char confirm[PATH_MAX];
     sprintf(confirm, "Yes - Install %s", basename(file));
     if (confirm_selection(confirm_install, confirm))
-        install_zip(sdcard_package_file);
+	install_zip(sdcard_package_file);
 }
 
 // This was pulled from bionic: The default system command always looks
@@ -373,28 +404,52 @@ __system(const char *command)
 
 void show_nandroid_restore_menu()
 {
-    if (ensure_root_path_mounted("SDCARD:") != 0) {
-        LOGE ("Can't mount /mnt/sdcard\n");
+    
+    static char* headersSel[] = {  "Choose a SD Card",
+                                "",
+                                NULL 
+    };
+
+    char* source;
+	
+    int chosen_item = get_menu_selection(headersSel, SD_SELECT_MENU_ITEMS, 0);
+        switch (chosen_item)
+        {
+            case INTERNAL_SD:
+                source = "SDCARD-INTERNAL:"; 
+                break;
+            case EXTERNAL_SD:
+                source = "SDCARD-EXTERNAL:"; 
+                break;
+	}
+
+    if (ensure_root_path_mounted(source) != 0) {
+        LOGE ("Can't mount \n");
         return;
     }
+
+    char mount_point[PATH_MAX];
+    translate_root_path(source, mount_point, PATH_MAX);
     
     static char* headers[] = {  "Choose an image to restore",
                                 "",
                                 NULL 
     };
 
-    char* file = choose_file_menu("/mnt/sdcard/clockworkmod/backup/", NULL, headers);
+    char* file = choose_file_menu(strcat(mount_point, "/clockworkmod/backup/"), NULL, headers);
     if (file == NULL)
         return;
 
     if (confirm_selection("Confirm restore?", "Yes - Restore"))
-        nandroid_restore(file, 1, 1, 1, 1, 1);
+        nandroid_restore(file, 1, 1, 1, 1, 1, 0); //no default restore for paramfs
 }
 
 void show_mount_usb_storage_menu()
 {
     char command[PATH_MAX];
-    sprintf(command, "echo %s > /sys/devices/platform/usb_mass_storage/lun0/file", SDCARD_DEVICE_PRIMARY);
+    sprintf(command, "echo %s > /sys/devices/platform/s3c-usbgadget/gadget/lun0/file", SDCARD_INTERNAL_DEVICE);
+    __system(command);
+    sprintf(command, "echo %s > /sys/devices/platform/s3c-usbgadget/gadget/lun1/file", SDCARD_EXTERNAL_DEVICE);
     __system(command);
     static char* headers[] = {  "USB Mass Storage device",
                                 "Leaving this menu unmount",
@@ -412,8 +467,9 @@ void show_mount_usb_storage_menu()
             break;
     }
     
-    __system("echo '' > /sys/devices/platform/usb_mass_storage/lun0/file");
-    __system("echo 0 > /sys/devices/platform/usb_mass_storage/lun0/enable");
+    __system("echo '' > /sys/devices/platform/s3c-usbgadget/gadget/lun0/file");
+    __system("echo '' > /sys/devices/platform/s3c-usbgadget/gadget/lun1/file");
+
 }
 
 int confirm_selection(const char* title, const char* confirm)
@@ -443,7 +499,7 @@ int confirm_selection(const char* title, const char* confirm)
 int format_non_mtd_device(const char* root)
 {
     // if this is SDEXT:, don't worry about it.
-    if (0 == strcmp(root, "SDEXT:"))
+    if (0 == strcmp(root, "SDCARD-EXTERNAL:"))
     {
         struct stat st;
         if (0 != stat(SDEXT_DEVICE, &st))
@@ -464,8 +520,10 @@ int format_non_mtd_device(const char* root)
 
     static char tmp[PATH_MAX];
     sprintf(tmp, "rm -rf %s*", path);
+    ui_print(tmp);
     __system(tmp);
     sprintf(tmp, "rm -rf %s.*", path);
+    ui_print(tmp);
     __system(tmp);
 
     ensure_root_path_unmounted(root);
@@ -473,7 +531,12 @@ int format_non_mtd_device(const char* root)
 }
 
 #define MOUNTABLE_COUNT 5
+#ifdef BOARD_USES_BMLUTILS
+#define MTD_COUNT 3
+#else
 #define MTD_COUNT 4
+#endif
+
 #define MMC_COUNT 2
 
 void show_partition_menu()
@@ -485,23 +548,25 @@ void show_partition_menu()
 
     typedef char* string;
     string mounts[MOUNTABLE_COUNT][3] = { 
-        { "mount /system", "unmount /system", "SYSTEM:" },
-        { "mount /data", "unmount /data", "DATA:" },
-        { "mount /cache", "unmount /cache", "CACHE:" },
-        { "mount /mnt/sdcard", "unmount /mnt/sdcard", "SDCARD:" },
-        { "mount /sd-ext", "unmount /sd-ext", "SDEXT:" }
+        { "mount SYSTEM", "unmount SYSTEM", "SYSTEM:" },
+        { "mount DATA", "unmount DATA", "DATA:" },
+        { "mount CACHE", "unmount CACHE", "CACHE:" },
+        { "mount SDCARD-INTERNAL", "unmount SDCARD-INTERNAL", "SDCARD-INTERNAL:" },
+        { "mount SDCARD-EXTERNAL", "unmount SDCARD-EXTERNAL", "SDCARD-EXTERNAL:" }
         };
         
     string mtds[MTD_COUNT][2] = {
+#ifndef BOARD_USES_BMLUTILS
         { "format boot", "BOOT:" },
+#endif
         { "format system", "SYSTEM:" },
         { "format data", "DATA:" },
         { "format cache", "CACHE:" },
     };
     
     string mmcs[MMC_COUNT][3] = {
-      { "format sdcard", "SDCARD:" },
-      { "format sd-ext", "SDEXT:" }  
+      { "format SDCARD-INTERNAL", "SDCARD-INTERNAL:" },
+      { "format SDCARD-EXTERNAL", "SDCARD-EXTERNAL:" }  
     };
     
     static char* confirm_format  = "Confirm format?";
@@ -678,12 +743,33 @@ int amend_main(int argc, char** argv)
 
 void show_nandroid_advanced_restore_menu()
 {
-    if (ensure_root_path_mounted("SDCARD:") != 0) {
-        LOGE ("Can't mount /mnt/sdcard\n");
+    static char* headersSel[] = {  "Choose a SD Card",
+                                "",
+                                NULL 
+    };
+
+    char* source;
+	
+    int chosen_itemsd = get_menu_selection(headersSel, SD_SELECT_MENU_ITEMS, 0);
+        switch (chosen_itemsd)
+        {
+            case INTERNAL_SD:
+                source = "SDCARD-INTERNAL:"; 
+                break;
+            case EXTERNAL_SD:
+                source = "SDCARD-EXTERNAL:"; 
+                break;
+	}
+
+    if (ensure_root_path_mounted(source) != 0) {
+        LOGE ("Can't mount \n");
         return;
     }
 
-    static char* advancedheaders[] = {  "Choose an image to restore",
+    char mount_point[PATH_MAX];
+    translate_root_path(source, mount_point, PATH_MAX);
+    
+    static char* headersadv[] = {  "Choose an image to restore",
                                 "",
                                 "Choose an image to restore",
                                 "first. The next menu will",
@@ -692,9 +778,10 @@ void show_nandroid_advanced_restore_menu()
                                 NULL
     };
 
-    char* file = choose_file_menu("/mnt/sdcard/clockworkmod/backup/", NULL, advancedheaders);
+    char* file = choose_file_menu(strcat(mount_point, "/clockworkmod/backup/"), NULL, headersadv);
     if (file == NULL)
         return;
+
 
     static char* headers[] = {  "Nandroid Advanced Restore",
                                 "",
@@ -706,6 +793,7 @@ void show_nandroid_advanced_restore_menu()
                             "Restore data",
                             "Restore cache",
                             "Restore sd-ext",
+			    "Restore paramfs",
                             NULL
     };
 
@@ -717,23 +805,27 @@ void show_nandroid_advanced_restore_menu()
     {
         case 0:
             if (confirm_selection(confirm_restore, "Yes - Restore boot"))
-                nandroid_restore(file, 1, 0, 0, 0, 0);
+                nandroid_restore(file, 1, 0, 0, 0, 0, 0);
             break;
         case 1:
             if (confirm_selection(confirm_restore, "Yes - Restore system"))
-                nandroid_restore(file, 0, 1, 0, 0, 0);
+                nandroid_restore(file, 0, 1, 0, 0, 0, 0);
             break;
         case 2:
             if (confirm_selection(confirm_restore, "Yes - Restore data"))
-                nandroid_restore(file, 0, 0, 1, 0, 0);
+                nandroid_restore(file, 0, 0, 1, 0, 0, 0);
             break;
         case 3:
             if (confirm_selection(confirm_restore, "Yes - Restore cache"))
-                nandroid_restore(file, 0, 0, 0, 1, 0);
+                nandroid_restore(file, 0, 0, 0, 1, 0, 0);
             break;
         case 4:
             if (confirm_selection(confirm_restore, "Yes - Restore sd-ext"))
-                nandroid_restore(file, 0, 0, 0, 0, 1);
+                nandroid_restore(file, 0, 0, 0, 0, 1, 0);
+            break;
+	 case 5:
+            if (confirm_selection(confirm_restore, "Yes - Restore paramfs"))
+                nandroid_restore(file, 0, 0, 0, 0, 0, 1);
             break;
     }
 }
@@ -759,17 +851,44 @@ void show_nandroid_menu()
                 char backup_path[PATH_MAX];
                 time_t t = time(NULL);
                 struct tm *tmp = localtime(&t);
+ 
+		static char* headersSel[] = {  "Choose a SD Card",
+                                "",
+                                NULL 
+   	        };
+
+    		char* target;
+	
+    		int chosen_item = get_menu_selection(headersSel, SD_SELECT_MENU_ITEMS, 0);
+        	switch (chosen_item)
+        	{
+		       case INTERNAL_SD:
+	   	          target = "SDCARD-INTERNAL:"; 
+           		        break;
+            	       case EXTERNAL_SD:
+                          target = "SDCARD-EXTERNAL:"; 
+                		break;
+		}
+
+		if (ensure_root_path_mounted(target) != 0) {
+        	     LOGE ("Can't mount \n");
+        	     return;
+    		}
+
+    		char mount_point[PATH_MAX];
+		translate_root_path(target, mount_point, PATH_MAX);
+		 			
                 if (tmp == NULL)
-                {
+		{	       
                     struct timeval tp;
                     gettimeofday(&tp, NULL);
-                    sprintf(backup_path, "/mnt/sdcard/clockworkmod/backup/%d", tp.tv_sec);
+                    sprintf(backup_path, strcat(mount_point,"/clockworkmod/backup/%d"), tp.tv_sec);
                 }
                 else
                 {
-                    strftime(backup_path, sizeof(backup_path), "/mnt/sdcard/clockworkmod/backup/%F.%H.%M.%S", tmp);
+                    strftime(backup_path, sizeof(backup_path), strcat(mount_point,"/clockworkmod/backup/%F.%H.%M.%S"), tmp);
                 }
-                nandroid_backup(backup_path);
+                nandroid_backup(backup_path, target);
             }
             break;
         case 1:
@@ -802,8 +921,11 @@ void show_advanced_menu()
                             "Report Error",
                             "Key Test",
 #ifndef BOARD_HAS_SMALL_RECOVERY
-                            "Partition SD Card",
+                            "Partition SD Card",			   
                             "Fix Permissions",
+#ifdef BOARD_USES_BMLUTILS
+			    "Flash Kernel from SD",
+#endif
 #endif
                             /*
                             "Apply/De-apply Lagfix",
@@ -842,7 +964,7 @@ void show_advanced_menu()
                 if (confirm_selection( "Confirm wipe?", "Yes - Wipe Dalvik Cache")) {
                     __system("rm -r /data/dalvik-cache");
                     __system("rm -r /cache/dalvik-cache");
-                    __system("rm -r /sd-ext/dalvik-cache");
+                    __system("rm -r /sd-ext/dalvik-cache"); //FIXME
                 }
                 ensure_root_path_unmounted("DATA:");
                 ui_print("Dalvik Cache wiped.\n");
@@ -874,6 +996,8 @@ void show_advanced_menu()
             }
             case 6:
             {
+		ui_print("Partitions SD Card not supported"); //FIXME
+		break;
                 static char* ext_sizes[] = { "128M",
                                              "256M",
                                              "512M",
@@ -922,15 +1046,74 @@ void show_advanced_menu()
                 ui_print("Done!\n");
                 break;
             }
-            /*
+            
             case 8:
             {
-                show_lagfix_menu();
-                break;
+
+		flash_kernel();
+		break;
             }
-            */
+            
         }
     }
+}
+
+int flash_kernel()
+{
+    static char* headers[] = {  "Choose a SD Card",
+                                "",
+                                NULL 
+    };
+
+    char* source;
+	
+    int chosen_item = get_menu_selection(headers, SD_SELECT_MENU_ITEMS, 0);
+        switch (chosen_item)
+        {
+            case INTERNAL_SD:
+                source = "SDCARD-INTERNAL:"; 
+                break;
+            case EXTERNAL_SD:
+                source = "SDCARD-EXTERNAL:"; 
+                break;
+	}
+
+    if (ensure_root_path_mounted(source) != 0) {
+        LOGE ("Can't mount \n");
+        return 1;
+    }
+
+    char mount_point[PATH_MAX];
+    translate_root_path(source, mount_point, PATH_MAX);
+
+    static char* headersSelect[] = {  "Choose a image to falsh",
+                                "",
+                                NULL 
+    };
+    
+    char* file = choose_file_menu(mount_point, ".img", headersSelect);
+	
+    if (file == NULL)
+        return 2;
+    char sdcard_package_file[1024];
+    strcpy(sdcard_package_file, source);
+    strcat(sdcard_package_file,  file + strlen(mount_point));
+    static char* confirm_install  = "Confirm flash?";
+    static char confirm[PATH_MAX];
+    sprintf(confirm, "Yes - falsh %s", basename(file));
+    if (confirm_selection(confirm_install, confirm))
+	return write_kernel(sdcard_package_file);
+    return 3;
+}
+
+int write_kernel(char *path)
+{
+     int ret;
+     if (0 != (ret = write_raw_image("boot", path))) {
+            ui_print("Error while flashing boot image!");
+            return ret;
+     }
+     return 1;
 }
 
 void write_fstab_root(char *root_path, FILE *file)

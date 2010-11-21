@@ -51,12 +51,14 @@ static RootInfo g_roots[] = {
     { "MISC:", g_mtd_device, NULL, "misc", NULL, g_raw, NULL },
     { "PACKAGE:", NULL, NULL, NULL, NULL, g_package_file, NULL },
     { "RECOVERY:", g_mtd_device, NULL, "recovery", "/", g_raw, NULL },
-    { "SDCARD:", SDCARD_DEVICE_PRIMARY, SDCARD_DEVICE_SECONDARY, NULL, "/mnt/sdcard", "vfat", NULL },
-    { "SDEXT:", NULL, NULL, NULL, "/sd-ext", SDEXT_FILESYSTEM, NULL },
+    { "SDCARD-INTERNAL:", SDCARD_INTERNAL_DEVICE, NULL, NULL, "/mnt/emmc", "vfat", NULL },
+    { "SDCARD-EXTERNAL:", SDCARD_EXTERNAL_DEVICE, NULL, NULL, "/mnt/sdcard", "vfat", NULL },
     { "SYSTEM:", SYSTEM_DEVICE, NULL, "system", "/system", SYSTEM_FILESYSTEM, SYSTEM_FILESYSTEM_OPTIONS },
     { "MBM:", g_mtd_device, NULL, "mbm", NULL, g_raw, NULL },
     { "TMP:", NULL, NULL, NULL, "/tmp", NULL, NULL },
-    { "EFS:", "dev/block/stl3", NULL, NULL, "/efs", "rfs", NULL },
+#ifdef HAS_PRAMAFS
+    { "EFS:", PARAMFS_DEVICE, NULL, NULL, "/efs", PARAMFS_FILESYSTEM, NULL },
+#endif
 };
 #define NUM_ROOTS (sizeof(g_roots) / sizeof(g_roots[0]))
 

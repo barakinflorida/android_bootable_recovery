@@ -54,6 +54,7 @@ int read_raw_image(const char* partition, const char* filename) {
 }
 #endif
 
+
 int print_and_error(char* message) {
     ui_print(message);
     return 1;
@@ -122,21 +123,25 @@ int nandroid_backup_partition(const char* backup_path, char* root) {
     return nandroid_backup_partition_extended(backup_path, root, 1);
 }
 
-int nandroid_backup(const char* backup_path) {
-  return nandroid_backup_flags(backup_path,0);
+int nandroid_backup(const char* backup_path, char* tagetroot) {
+  return nandroid_backup_flags(backup_path,0,tagetroot);
 }
 
-int nandroid_backup_flags(const char* backup_path, int flags)
+int nandroid_backup_flags(const char* backup_path, int flags, char* tagetroot)
 {
     ui_set_background(BACKGROUND_ICON_INSTALLING);
     
-    if (ensure_root_path_mounted("SDCARD:") != 0)
-        return print_and_error("Can't mount /mnt/sdcard\n");
+    if (ensure_root_path_mounted(tagetroot) != 0)
+        return print_and_error("Can't mount\n");
     
     int ret;
     struct statfs s;
-    if (0 != (ret = statfs("/mnt/sdcard", &s)))
-        return print_and_error("Unable to stat /mnt/sdcard\n");
+
+    char mount_point[PATH_MAX];
+    translate_root_path(tagetroot, mount_point, PATH_MAX);
+
+    if (0 != (ret = statfs(mount_point, &s)))
+        return print_and_error("Unable to stat\n");
     uint64_t bavail = s.f_bavail;
     uint64_t bsize = s.f_bsize;
     uint64_t sdcard_free = bavail * bsize;
@@ -155,12 +160,13 @@ int nandroid_backup_flags(const char* backup_path, int flags)
     ret = read_raw_image("boot", tmp);
     if (0 != ret)
         return print_and_error("Error while dumping boot image!\n");
-
+#ifndef BOARD_HAS_NO_RECOVERY_PARTITION
     ui_print("Backing up recovery...\n");
     sprintf(tmp, "%s/%s", backup_path, "recovery.img");
     ret = read_raw_image("recovery", tmp);
     if (0 != ret)
         return print_and_error("Error while dumping recovery image!\n");
+#endif
 #endif
 
     if (!(flags & DONT_BACKUP_SYSTEM)) {
@@ -176,37 +182,17 @@ int nandroid_backup_flags(const char* backup_path, int flags)
         return ret;
 #endif
 
-    struct stat st;
-    if (!(flags & DONT_BACKUP_SYSTEM)) {
-      if (0 != stat("/mnt/sdcard/.android_secure", &st))
-      {
-          ui_print("No /mnt/sdcard/.android_secure found. Skipping backup of applications on external storage.\n");
-      }
-      else
-      {
-          if (0 != (ret = nandroid_backup_partition_extended(backup_path, "SDCARD:/.android_secure", 0)))
-              return ret;
-      }
-    }
+    //FIXME APP TO SD Backup
 
     if (0 != (ret = nandroid_backup_partition_extended(backup_path, "CACHE:", 0)))
         return ret;
 
     if (!(flags & DONT_BACKUP_SYSTEM)) {
+#ifdef HAS_PRAMAFS
       if (0 != (ret = nandroid_backup_partition_extended(backup_path, "EFS:", 0)))
-          return ret;
-
-      if (0 != stat(SDEXT_DEVICE, &st))
-      {
-          ui_print("No sd-ext found. Skipping backup of sd-ext.\n");
-      }
-      else
-      {
-          if (0 != ensure_root_path_mounted("SDEXT:"))
-              ui_print("Could not mount sd-ext. sd-ext backup may not be supported on this device. Skipping backup of sd-ext.\n");
-          else if (0 != (ret = nandroid_backup_partition(backup_path, "SDEXT:")))
-              return ret;
-      }
+          return ret;  
+#endif
+     
     }
 
     ui_print("Generating md5 sum...\n");
@@ -285,7 +271,7 @@ int nandroid_restore_partition(const char* backup_path, const char* root) {
     return nandroid_restore_partition_extended(backup_path, root, 1);
 }
 
-int nandroid_restore(const char* backup_path, int restore_boot, int restore_system, int restore_data, int restore_cache, int restore_sdext)
+int nandroid_restore(const char* backup_path, int restore_boot, int restore_system, int restore_data, int restore_cache, int restore_sdext, int restore_paramfs)
 {
     ui_set_background(BACKGROUND_ICON_INSTALLING);
     ui_show_indeterminate_progress();
@@ -304,10 +290,13 @@ int nandroid_restore(const char* backup_path, int restore_boot, int restore_syst
     int ret;
 #ifndef BOARD_RECOVERY_IGNORE_BOOTABLES
     if (restore_boot)
-    {
-        ui_print("Erasing boot before restore...\n");
+    {        
+//no need to  format bml devices
+#ifndef BOARD_USES_BMLUTILS
+	ui_print("Erasing boot before restore...\n");
         if (0 != (ret = format_root_device("BOOT:")))
             return print_and_error("Error while formatting BOOT:!\n");
+#endif
         sprintf(tmp, "%s/boot.img", backup_path);
         ui_print("Restoring boot image...\n");
         if (0 != (ret = write_raw_image("boot", tmp))) {
@@ -320,10 +309,6 @@ int nandroid_restore(const char* backup_path, int restore_boot, int restore_syst
     if (restore_system) {
       if (0 != (ret = nandroid_restore_partition(backup_path, "SYSTEM:")))
           return ret;
-      // we don't want to restore the /system/etc/lagfix.conf files as they can cause problems
-      ensure_root_path_mounted("SYSTEM:");
-      __system("rm /system/etc/lagfix.conf");
-      __system("rm /system/etc/lagfix.conf.old");
     }
 
     if (restore_data && 0 != (ret = nandroid_restore_partition(backup_path, "DATA:")))
@@ -334,14 +319,17 @@ int nandroid_restore(const char* backup_path, int restore_boot, int restore_syst
         return ret;
 #endif
 
-    if (restore_data && 0 != (ret = nandroid_restore_partition_extended(backup_path, "SDCARD:/.android_secure", 0)))
-        return ret;
+     //FIXME Aps to SD Backup
+    //if (restore_data && 0 != (ret = nandroid_restore_partition_extended(backup_path, "SDCARD:/.android_secure", 0)))
+    //    return ret;
 
     if (restore_cache && 0 != (ret = nandroid_restore_partition_extended(backup_path, "CACHE:", 0)))
         return ret;
 
-    if (restore_sdext && 0 != (ret = nandroid_restore_partition(backup_path, "SDEXT:")))
+#ifdef HAS_PRAMAFS
+    if (restore_paramfs && 0 != (ret = nandroid_restore_partition(backup_path, "EFS:")))
         return ret;
+#endif
 
     sync();
     ui_set_background(BACKGROUND_ICON_NONE);
@@ -385,14 +373,14 @@ int nandroid_main(int argc, char** argv)
         
         char backup_path[PATH_MAX];
         nandroid_generate_timestamp_path(backup_path);
-        return nandroid_backup(backup_path);
+        return nandroid_backup(backup_path,"SDCARD:");
     }
 
     if (strcmp("restore", argv[1]) == 0)
     {
         if (argc != 3)
             return nandroid_usage();
-        return nandroid_restore(argv[2], 1, 1, 1, 1, 1);
+        return nandroid_restore(argv[2], 1, 1, 1, 1, 1 , 0);
     }
     
     return nandroid_usage();
