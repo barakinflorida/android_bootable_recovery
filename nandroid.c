@@ -277,9 +277,6 @@ int nandroid_restore(const char* backup_path, int restore_boot, int restore_syst
     ui_show_indeterminate_progress();
     yaffs_files_total = 0;
 
-    if (ensure_root_path_mounted("SDCARD:") != 0)
-        return print_and_error("Can't mount /mnt/sdcard\n");
-    
     char tmp[PATH_MAX];
 
     ui_print("Checking MD5 sums...\n");
@@ -297,11 +294,14 @@ int nandroid_restore(const char* backup_path, int restore_boot, int restore_syst
         if (0 != (ret = format_root_device("BOOT:")))
             return print_and_error("Error while formatting BOOT:!\n");
 #endif
-        sprintf(tmp, "%s/boot.img", backup_path);
-        ui_print("Restoring boot image...\n");
-        if (0 != (ret = write_raw_image("boot", tmp))) {
+         sprintf(tmp, "%s/boot.img", backup_path);
+	 struct stat file_info;
+         if (0 == (ret = statfs(tmp, &file_info))) {
+ 	 ui_print("Restoring boot image...\n");
+         if (0 != (ret = write_raw_image("boot", tmp))) {
             ui_print("Error while flashing boot image!");
             return ret;
+        }       
         }
     }
 #endif
