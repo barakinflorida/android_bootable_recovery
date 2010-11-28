@@ -116,7 +116,7 @@ void show_install_update_menu()
             case ITEM_SIG_CHECK:
                 toggle_signature_check();
                 break;
-            case ITEM_APPLY_SDCARD-EXTERNAL:
+            case ITEM_APPLY_SDCARD:
             {
                 if (confirm_selection("Confirm install?", "Yes - Install /mnt/sdcard/update.zip"))
                     install_zip(SDCARD_PACKAGE_FILE);

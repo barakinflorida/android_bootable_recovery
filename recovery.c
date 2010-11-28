@@ -490,7 +490,7 @@ prompt_and_wait() {
                 }
                 break;
 
-            case ITEM_APPLY_SDCARD-EXTERNAL:
+            case ITEM_APPLY_SDCARD:
                 if (confirm_selection("Confirm install?", "Yes - Install /sdcard/update.zip"))
                 {
                     ui_print("\n-- Install from sdcard...\n");
