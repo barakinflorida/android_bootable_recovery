@@ -373,7 +373,7 @@ int nandroid_main(int argc, char** argv)
         
         char backup_path[PATH_MAX];
         nandroid_generate_timestamp_path(backup_path);
-        return nandroid_backup(backup_path,"SDCARD:");
+        return nandroid_backup(backup_path,"SDCARD-INTERNAL:");
     }
 
     if (strcmp("restore", argv[1]) == 0)

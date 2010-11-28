@@ -43,7 +43,7 @@
 
 int signature_check_enabled = 1;
 int script_assert_enabled = 1;
-static const char *SDCARD_PACKAGE_FILE = "SDCARD:update.zip";
+static const char *SDCARD_PACKAGE_FILE = "SDCARD-EXTERNAL:update.zip";
 
 void
 toggle_signature_check()
@@ -81,7 +81,7 @@ int install_zip(const char* packagefilepath)
     return 0;
 }
 
-char* INSTALL_MENU_ITEMS[] = {  "apply sdcard:update.zip",
+char* INSTALL_MENU_ITEMS[] = {  "apply sdcard-external:update.zip",
                                 "choose zip from sdcard",
                                 "toggle signature verification",
                                 "toggle script asserts",
@@ -116,7 +116,7 @@ void show_install_update_menu()
             case ITEM_SIG_CHECK:
                 toggle_signature_check();
                 break;
-            case ITEM_APPLY_SDCARD:
+            case ITEM_APPLY_SDCARD-EXTERNAL:
             {
                 if (confirm_selection("Confirm install?", "Yes - Install /mnt/sdcard/update.zip"))
                     install_zip(SDCARD_PACKAGE_FILE);
@@ -711,7 +711,7 @@ int run_and_remove_extendedcommand()
     int i = 0;
     for (i = 20; i > 0; i--) {
         ui_print("Waiting for SD Card to mount (%ds)\n", i);
-        if (ensure_root_path_mounted("SDCARD:") == 0) {
+        if (ensure_root_path_mounted("SDCARD-EXTERNAL:") == 0) {
             ui_print("SD Card mounted...\n");
             break;
         }
@@ -1023,7 +1023,7 @@ void show_advanced_menu()
                     continue;
 
                 char sddevice[256];
-                const RootInfo *ri = get_root_info_for_path("SDCARD:");
+                const RootInfo *ri = get_root_info_for_path("SDCARD-EXTERNAL:");
                 strcpy(sddevice, ri->device);
                 // we only want the mmcblk, not the partition
                 sddevice[strlen("/dev/block/mmcblkX")] = NULL;
@@ -1151,8 +1151,8 @@ void create_fstab()
     write_fstab_root("DATADATA:", file);
 #endif
     write_fstab_root("SYSTEM:", file);
-    write_fstab_root("SDCARD:", file);
-    write_fstab_root("SDEXT:", file);
+    write_fstab_root("SDCARD-EXTERNAL:", file);
+    write_fstab_root("SDCARD-INTERNAL:", file);
     fclose(file);
 }
 
@@ -1160,7 +1160,7 @@ void handle_failure(int ret)
 {
     if (ret == 0)
         return;
-    if (0 != ensure_root_path_mounted("SDCARD:"))
+    if (0 != ensure_root_path_mounted("SDCARD-EXTERNAL:"))
         return;
     mkdir("/mnt/sdcard/clockworkmod", S_IRWXU);
     __system("cp /tmp/recovery.log /mnt/sdcard/clockworkmod/recovery.log");

@@ -56,7 +56,7 @@ static int allow_display_toggle = 1;
 static const char *COMMAND_FILE = "CACHE:recovery/command";
 static const char *INTENT_FILE = "CACHE:recovery/intent";
 static const char *LOG_FILE = "CACHE:recovery/log";
-static const char *SDCARD_PACKAGE_FILE = "SDCARD:update.zip";
+static const char *SDCARD_PACKAGE_FILE = "SDCARD-EXTERNAL:update.zip";
 static const char *TEMPORARY_LOG_FILE = "/tmp/recovery.log";
 
 /*
@@ -450,7 +450,7 @@ wipe_data(int confirm) {
 #endif
     erase_root("CACHE:");
     erase_root("SDEXT:");
-    erase_root("SDCARD:/.android_secure");
+    erase_root("SDCARD-EXTERNAL:/.android_secure");
     ui_print("Data wipe complete.\n");
 }
 
@@ -490,7 +490,7 @@ prompt_and_wait() {
                 }
                 break;
 
-            case ITEM_APPLY_SDCARD:
+            case ITEM_APPLY_SDCARD-EXTERNAL:
                 if (confirm_selection("Confirm install?", "Yes - Install /sdcard/update.zip"))
                 {
                     ui_print("\n-- Install from sdcard...\n");
